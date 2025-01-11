@@ -1,0 +1,10 @@
+langchain-core==0.3.28
+# langchain-community==0.3.0
+langchain-mistralai==0.2.4
+langchain-text-splitters==0.3.0
+langgraph==0.2.50
+# pydantic==2.9.2
+python-dotenv==1.0.1
+streamlit==1.30.0
+# tavily-python==0.5.0
+tzdata==2024.1
