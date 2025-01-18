@@ -76,24 +76,23 @@ class SnowflakeCortexVectorStore(VectorStore):
         embeddings = self.embeddings.embed_documents(texts)
         for t, m, e in zip(texts, metadatas, embeddings):
             cursor.execute(
-                """
+                f"""
                 MERGE INTO IDENTIFIER(%(topic)s) orig USING (
                     SELECT
                         UUID_STRING() AS UUID,
                         TO_VARCHAR(%(text)s) AS TEXT,
                         PARSE_JSON(%(metadata)s) AS METADATA,
-                        %(embeddings)s::VECTOR(FLOAT, %(dim)s) AS EMBEDDINGS
+                        {e}::VECTOR(FLOAT, %(dim)s) AS EMBEDDINGS
                     ) new
                 ON new.UUID = orig.UUID
                 WHEN NOT MATCHED THEN
-                    INSERT INTO (UUID, TEXT, METADATA, EMBEDDINGS)
+                    INSERT (UUID, TEXT, METADATA, EMBEDDINGS)
                     VALUES (new.UUID, new.TEXT, new.METADATA, new.EMBEDDINGS);
                 """,
                 params={
                     "topic": self.topic,
                     "text": t.replace("'", "\\'"),
                     "metadata": json.dumps(m),
-                    "embeddings": e,
                     "dim": self.dimensions,
                 }
             )
