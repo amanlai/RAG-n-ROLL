@@ -1,8 +1,6 @@
 # standard library
 from typing import Annotated, Literal, TypedDict
-
 # third-party library
-from dotenv import load_dotenv
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.prompts import (
@@ -18,15 +16,8 @@ from langgraph.graph import StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Checkpointer
-
 # local
 from .tools import get_tools
-
-load_dotenv()
-
-
-MODEL_NAME = "mistral-large-latest"  # "mistral-large2"
-TEMPERATURE = 0.1
 
 
 class State(TypedDict):
@@ -42,14 +33,16 @@ class Config(TypedDict):
 class Agent:
     def __init__(
         self,
+        model: str,
+        temperature: float,
         topic: str,
         vector_store: VectorStore,
         verbose: bool = True,
     ) -> None:
         self.verbose = verbose
         self.llm: BaseChatModel = ChatMistralAI(
-            model=MODEL_NAME,
-            temperature=TEMPERATURE,
+            model=model,
+            temperature=temperature,
             max_retries=2,
         )
         self.tools = get_tools(topic, vector_store)

@@ -2,7 +2,6 @@
 from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
-
 # third-party library
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import tool, create_retriever_tool

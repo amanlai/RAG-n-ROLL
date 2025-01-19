@@ -1,8 +1,12 @@
 # third-party library
 import streamlit as st
-
 # local
-from utils.helpers import build_page, create_answer, initialize_session_state
+from utils.helpers import (
+    build_page,
+    create_answer,
+    initialize_session_state,
+    initialize_sidebar
+)
 
 st.set_page_config(
     page_title="RAG 'n' ROLL Amp up Search",
@@ -11,6 +15,9 @@ st.set_page_config(
 
 
 def main():
+
+    with st.sidebar:
+        initialize_sidebar()
 
     build_page()
     initialize_session_state()

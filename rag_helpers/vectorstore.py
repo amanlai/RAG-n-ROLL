@@ -1,38 +1,28 @@
 # standard library
 import json
-import os
 from typing import Iterable, Self, Any
 # third-party library
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
 import snowflake.connector as connector
-
-SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT")
-SNOWFLAKE_USER = os.getenv("SNOWFLAKE_USER")
-SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD")
-SNOWFLAKE_DATABASE = os.getenv("SNOWFLAKE_DATABASE")
-SNOWFLAKE_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA")
-SNOWFLAKE_WAREHOUSE = os.getenv("SNOWFLAKE_WAREHOUSE")
+from snowflake.connector import SnowflakeConnection
 
 
 class SnowflakeCortexVectorStore(VectorStore):
     def __init__(
         self,
+        connection: SnowflakeConnection,
         topic: str,
         embeddings: Embeddings,
         dimensions: int,
-    ):
+    ) -> None:
         connector.paramstyle = "format"
-        self.connection = connector.connect(
-            user=SNOWFLAKE_USER,
-            password=SNOWFLAKE_PASSWORD,
-            account=SNOWFLAKE_ACCOUNT,
-            client_session_keep_alive=True,
-        )
+        self.connection = connection
         self.topic = topic
         self.embeddings = embeddings
         self.dimensions = dimensions
+        self.create_db_schema_wh_if_not_exists()
         self.create_table_if_not_exists()
 
     @classmethod
@@ -42,15 +32,53 @@ class SnowflakeCortexVectorStore(VectorStore):
         embeddings: Embeddings,
         metadatas: Iterable[dict] | None = None,
         topic: str | None = None,
+        connection: SnowflakeConnection | None = None,
         **kwargs: Any,
     ) -> Self:
         if topic is None:
             raise ValueError("Must provide 'topic' named parameter.")
+        if connection is None:
+            raise ValueError("Must provide 'connection' named parameter.")
         if metadatas is None:
             metadatas = ({} for _ in texts)
-        vector_store = cls(topic=topic, embeddings=embeddings, **kwargs)
+        vector_store = cls(
+            topic=topic, embeddings=embeddings, connection=connection, **kwargs
+        )
         vector_store.add_texts(texts=texts, metadatas=metadatas)
         return vector_store
+
+    def create_db_schema_wh_if_not_exists(self) -> None:
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "CREATE DATABASE IF NOT EXISTS %(database)s;",
+            params={"database": f"{self.topic}_database"}
+        )
+        cursor.execute(
+            "CREATE SCHEMA IF NOT EXISTS %(schema)s;",
+            params={"schema": f"{self.topic}_schema"}
+        )
+        cursor.execute(
+            """
+            CREATE OR REPLACE WAREHOUSE %(warehouse)s WITH
+                WAREHOUSE_SIZE='X-SMALL'
+                AUTO_SUSPEND = 120
+                AUTO_RESUME = TRUE
+                INITIALLY_SUSPENDED=TRUE;
+            """,
+            params={"warehouse": f"{self.topic}_warehouse"}
+        )
+        cursor.execute(
+            "USE DATABASE %(database)s;",
+            params={"database": f"{self.topic}_database"}
+        )
+        cursor.execute(
+            "USE %(database)s.%(schema)s;",
+            params={"database": f"{self.topic}_database", "schema": f"{self.topic}_schema"}
+        )
+        cursor.execute(
+            "USE WAREHOUSE %(warehouse)s;",
+            params={"warehouse": f"{self.topic}_warehouse"}
+        )
 
     def create_table_if_not_exists(self) -> None:
         self.connection.cursor().execute(
@@ -75,6 +103,7 @@ class SnowflakeCortexVectorStore(VectorStore):
         cursor = self.connection.cursor()
         embeddings = self.embeddings.embed_documents(texts)
         for t, m, e in zip(texts, metadatas, embeddings):
+            # https://github.com/b-art-b/langchain-snowpoc/blob/main/langchain_snowpoc/vectorstores.py#L97-L109
             cursor.execute(
                 f"""
                 MERGE INTO IDENTIFIER(%(topic)s) orig USING (

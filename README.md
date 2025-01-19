@@ -33,6 +33,9 @@ Mistral LLM (mistral-large2) on Snowflake Cortex for generation
 
     ```ini
     MISTRAL_API_KEY=YOUR_KEY_HERE
+    SNOWFLAKE_ACCOUNT=YOUR_ACCOUNT_IDENTIFIER_HERE
+    SNOWFLAKE_USER=YOUR_USERNAME_HERE
+    SNOWFLAKE_PASSWORD=YOUR_PASSWORD_HERE
     ```
 
 ## Running the App
