@@ -61,6 +61,8 @@ def init_sidebar():
         # close old session
         if "session" in st.session_state:
             st.session_state["session"].close()
+        if "agent" in st.session_state:
+            del st.session_state["agent"]
         # start new session
         connection_parameters = {
             "account": SNOWFLAKE_ACCOUNT,
@@ -69,7 +71,7 @@ def init_sidebar():
         }
         session = Session.builder.configs(connection_parameters).create()
         st.session_state["session"] = session
-        st.session_state["chat_history"] = []
+        clear()
 
     source = st.radio(
         "Select the data to use as context for your chatbot.",
@@ -81,7 +83,7 @@ def init_sidebar():
             st.session_state["topic"] = "Snowflake Documentation"
             ingester = IngestData(
                 session=st.session_state["session"],
-                topic=st.session_state["topic"],
+                topic="".join(st.session_state["topic"].split()).lower(),
             )
             st.session_state["vector_store"] = ingester.get_vector_store()
         else:
@@ -91,7 +93,7 @@ def init_sidebar():
             if add_data:
                 ingester = IngestData(
                     session=st.session_state["session"],
-                    topic=st.session_state["topic"],
+                    topic="".join(st.session_state["topic"].split()).lower(),
                     model=EMBEDDING_MODEL
                 )
                 if uploaded_file:
@@ -102,9 +104,7 @@ def init_sidebar():
                     raise ValueError(msg)
 
 
-def init_session_state() -> None:
-    if "chat_history" not in st.session_state:
-        clear()
+def init_agent() -> None:
     if "agent" not in st.session_state:
         agent = Agent(
             model=CHAT_MODEL,
@@ -116,10 +116,29 @@ def init_session_state() -> None:
         st.session_state["agent"] = agent.compile()
 
 
+def display_chat_history() -> None:
+    icons = {"ai": "❄️", "human": "👤"}
+    # display chat history
+    for message in st.session_state["chat_history"]:
+        with st.chat_message(message.type, avatar=icons[message.type]):
+            st.markdown(message.content)
+    # new user query
+    if prompt := st.chat_input("How may I assist you today?"):
+        with st.chat_message("human", avatar=icons["human"]):
+            st.markdown(prompt)
+            st.session_state["input"] = prompt
+        with st.chat_message("ai", avatar=icons["ai"]):
+            with st.spinner("Thinking..."):
+                st.write_stream(create_answer(prompt))
+
+
 def init_main_page() -> None:
-    if "topic" not in st.session_state:
+    if "chat_history" not in st.session_state:
+        clear()
+    if "topic" in st.session_state:
         st.header("Your Chat Assistant about {}".format(st.session_state["topic"].title()))
         _, col = st.columns([3,1])
         with col:
             st.button("Reset chat history", key="reset_button", on_click=clear)
-    init_session_state()
+        init_agent()
+        display_chat_history()
