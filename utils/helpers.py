@@ -3,6 +3,7 @@ import os
 import time
 from tempfile import NamedTemporaryFile
 from typing import Iterator
+import uuid
 # third-party library
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -23,13 +24,7 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "e5-base-v2")
 SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT")
 SNOWFLAKE_USER = os.getenv("SNOWFLAKE_USER")
 SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD")
-
-
-def build_page() -> None:
-    st.header("Your Chat Assistant about {}".format(st.session_state["topic"].title()))
-    _, col = st.columns([3,1])
-    with col:
-        st.button("Reset chat history", key="reset_button", on_click=clear)
+VERBOSE = os.getenv("VERBOSE", "False") == "True"
 
 
 def clear() -> None:
@@ -41,27 +36,13 @@ def create_answer(query: str) -> Iterator[str]:
     chat_history: list[BaseMessage] = st.session_state["chat_history"]
     response = agent.invoke(
         st.session_state.to_dict(),
-        {"configurable": {"thread_id": "1"}}
+        {"configurable": {"thread_id": str(uuid.uuid4)}},
     )
     ai_response: AIMessage = response["messages"][-1]
     chat_history.extend((HumanMessage(content=query), ai_response))
     for w in ai_response.content.split():
         time.sleep(0.05)
         yield f"{w} "
-
-
-def initialize_session_state() -> None:
-    if "chat_history" not in st.session_state:
-        st.session_state["chat_history"] = []
-    if "agent" not in st.session_state:
-        agent = Agent(
-            model=CHAT_MODEL,
-            temperature=CHAT_MODEL_TEMPERATURE,
-            topic=st.session_state["topic"],
-            vector_store=st.session_state["vector_store"],
-            verbose=True
-        )
-        st.session_state["agent"] = agent.compile()
 
 
 def get_new_vector_store(uploaded_file: UploadedFile, ingester: IngestData) -> None:
@@ -74,10 +55,13 @@ def get_new_vector_store(uploaded_file: UploadedFile, ingester: IngestData) -> N
         st.session_state["vector_store"] = vector_store
 
 
-def initialize_sidebar():
-
+def init_sidebar():
     start_session = st.button("Start/Restart Session")
     if start_session:
+        # close old session
+        if "session" in st.session_state:
+            st.session_state["session"].close()
+        # start new session
         connection_parameters = {
             "account": SNOWFLAKE_ACCOUNT,
             "user": SNOWFLAKE_USER,
@@ -116,3 +100,26 @@ def initialize_sidebar():
                     msg = "Must either upload a file or click the button to use existing data."
                     st.write(msg)
                     raise ValueError(msg)
+
+
+def init_session_state() -> None:
+    if "chat_history" not in st.session_state:
+        clear()
+    if "agent" not in st.session_state:
+        agent = Agent(
+            model=CHAT_MODEL,
+            temperature=CHAT_MODEL_TEMPERATURE,
+            topic=st.session_state["topic"],
+            vector_store=st.session_state["vector_store"],
+            verbose=VERBOSE
+        )
+        st.session_state["agent"] = agent.compile()
+
+
+def init_main_page() -> None:
+    if "topic" not in st.session_state:
+        st.header("Your Chat Assistant about {}".format(st.session_state["topic"].title()))
+        _, col = st.columns([3,1])
+        with col:
+            st.button("Reset chat history", key="reset_button", on_click=clear)
+    init_session_state()

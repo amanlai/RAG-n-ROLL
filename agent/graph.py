@@ -53,8 +53,13 @@ class Agent:
 
     def get_chain(self, llm: Runnable) -> Runnable:
         system_prompt = (
-            "You are a helpful assistant. "
-            "Be concise and accurate."
+            "You are a helpful AI chat assistant with RAG capabilities. "
+            "When a user asks you a question, you will use 'search-for-context' tool to get text relevant to the question. "
+            "Use that context with the user's chat history to provide a summary that addresses the user's question. "
+            "Ensure the answer is coherent, concise, and directly relevant to the user's question.\n"
+            "If the user asks a generic question which cannot be answered with the given context or chat_history,"
+            "just say 'I don\'t know the answer to that question.'\n"
+            "Don't say things like 'according to the provided context'."
         )
         prompt = ChatPromptTemplate.from_messages(
             [
