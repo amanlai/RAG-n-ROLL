@@ -25,7 +25,7 @@ def get_today() -> tuple[
     return weekday, today
 
 
-def get_tools(topic: str, vector_store: VectorStore, k: int = 4) -> BaseRetriever:
+def get_tools(topic: str, vector_store: VectorStore, k: int = 5) -> BaseRetriever:
     retriever = vector_store.as_retriever(
         search_type="similarity",
         search_kwargs={"k": k}

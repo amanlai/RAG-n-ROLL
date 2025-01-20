@@ -5,7 +5,6 @@ langchain-mistralai==0.2.4
 langchain-text-splitters==0.3.3
 langgraph==0.2.50
 # pydantic==2.9.2
-python-dotenv==1.0.1
 snowflake-connector-python==3.12.3
 snowflake-ml-python==1.7.3
 snowflake-snowpark-python==1.25.0

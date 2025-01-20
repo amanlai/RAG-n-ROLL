@@ -5,30 +5,96 @@ from tempfile import NamedTemporaryFile
 from typing import Iterator
 import uuid
 # third-party library
-from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from snowflake.snowpark import Session
 import streamlit as st
-from streamlit.runtime.uploaded_file_manager import UploadedFile
 # local
 from .ingest import IngestData
 from agent.graph import Agent
 # from agent.test import TestAgent as Agent
-load_dotenv()
 
 
-CHAT_MODEL = os.getenv("CHAT_MODEL", "mistral-large-latest")  # "mistral-large2"
-CHAT_MODEL_TEMPERATURE = float(os.getenv("TEMPERATURE", 0.1))
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "e5-base-v2")
-SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT")
-SNOWFLAKE_USER = os.getenv("SNOWFLAKE_USER")
-SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD")
-VERBOSE = os.getenv("VERBOSE", "False") == "True"
+CHAT_MODEL = st.secrets.get("CHAT_MODEL", "mistral-large-latest")  # "mistral-large2"
+CHAT_MODEL_TEMPERATURE = float(st.secrets.get("TEMPERATURE", 0.1))
+EMBEDDING_MODEL = st.secrets.get("EMBEDDING_MODEL", "e5-base-v2")
+SNOWFLAKE_ACCOUNT = st.secrets.get("SNOWFLAKE_ACCOUNT")
+SNOWFLAKE_USER = st.secrets.get("SNOWFLAKE_USER")
+SNOWFLAKE_PASSWORD = st.secrets.get("SNOWFLAKE_PASSWORD")
+VERBOSE = st.secrets.get("VERBOSE", "False") == "True"
 
+
+############ callback functions ############
 
 def clear() -> None:
     st.session_state["chat_history"] = []
+
+
+def handle_ingestion() -> None:
+    if st.session_state["source"] == "Use default":
+        st.session_state["topic"] = "Using the Python connector in Snowflake"
+        ingester = IngestData(
+            session=st.session_state["session"],
+            topic="usingthepythonconnectorinsnowflake",
+        )
+        st.session_state["vector_store"] = ingester.get_vector_store()
+    else:
+        st.text_input(
+            r"Topic / Title: $\\\textsf{\scriptsize Enter a concise and "
+            r"descriptive title for the context about to be uploaded.}$",
+            key="topic"
+        )
+        uploaded_file = st.file_uploader("Upload a file", type="docx")
+        add_data = st.button("Add Data")
+        if add_data:
+            if uploaded_file:
+                ingester = IngestData(
+                    session=st.session_state["session"],
+                    topic="".join(st.session_state["topic"].split()).lower().replace("-", "_"),
+                    model=EMBEDDING_MODEL
+                )
+                with st.spinner("Reading, splitting and embedding a file..."):
+                    with NamedTemporaryFile(delete=False) as tmp:
+                        tmp.write(uploaded_file.read())
+                        vector_store = ingester.build_embeddings(tmp.name)
+                    os.remove(tmp.name)
+                    st.success("File chunked, embedded and indexed successfully.")
+                    st.session_state["vector_store"] = vector_store
+            else:
+                msg = "Must either upload a file."
+                st.write(msg)
+                raise ValueError(msg)
+
+
+def init_new_session() -> None:
+    # close old session
+    if "session" in st.session_state:
+        st.session_state["session"].close()
+    if "agent" in st.session_state:
+        del st.session_state["agent"]
+    if "vector_store" in st.session_state:
+        del st.session_state["vector_store"]
+    # start new session
+    connection_parameters = {
+        "account": SNOWFLAKE_ACCOUNT,
+        "user": SNOWFLAKE_USER,
+        "password": SNOWFLAKE_PASSWORD,
+        "paramstyle": "pyformat"
+    }
+    session = Session.builder.configs(connection_parameters).create()
+    st.session_state["session"] = session
+    clear()
+
+    st.radio(
+        "Select the data to use as context for your chatbot.",
+        ["Use default", "Upload new"],
+        index=None,
+        key="source",
+        on_change=handle_ingestion
+    )
+
+
+############ layout helper functions ############
 
 
 def create_answer(query: str) -> Iterator[str]:
@@ -43,65 +109,6 @@ def create_answer(query: str) -> Iterator[str]:
     for w in ai_response.content.split():
         time.sleep(0.05)
         yield f"{w} "
-
-
-def get_new_vector_store(uploaded_file: UploadedFile, ingester: IngestData) -> None:
-    with st.spinner("Reading, splitting and embedding a file..."):
-        with NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(uploaded_file.read())
-            vector_store = ingester.build_embeddings(tmp.name)
-        os.remove(tmp.name)
-        st.success("File chunked, embedded and indexed successfully.")
-        st.session_state["vector_store"] = vector_store
-
-
-def init_sidebar():
-    start_session = st.button("Start/Restart Session")
-    if start_session:
-        # close old session
-        if "session" in st.session_state:
-            st.session_state["session"].close()
-        if "agent" in st.session_state:
-            del st.session_state["agent"]
-        # start new session
-        connection_parameters = {
-            "account": SNOWFLAKE_ACCOUNT,
-            "user": SNOWFLAKE_USER,
-            "password": SNOWFLAKE_PASSWORD,
-        }
-        session = Session.builder.configs(connection_parameters).create()
-        st.session_state["session"] = session
-        clear()
-
-    source = st.radio(
-        "Select the data to use as context for your chatbot.",
-        ["Use default", "Upload new"],
-        index=None
-    )
-    if source:
-        if source == "Use default":
-            st.session_state["topic"] = "Snowflake Documentation"
-            ingester = IngestData(
-                session=st.session_state["session"],
-                topic="".join(st.session_state["topic"].split()).lower(),
-            )
-            st.session_state["vector_store"] = ingester.get_vector_store()
-        else:
-            st.text_input("Topic", key="topic")
-            uploaded_file = st.file_uploader("Upload a file", type="docx")
-            add_data = st.button("Add Data")
-            if add_data:
-                ingester = IngestData(
-                    session=st.session_state["session"],
-                    topic="".join(st.session_state["topic"].split()).lower(),
-                    model=EMBEDDING_MODEL
-                )
-                if uploaded_file:
-                    get_new_vector_store(uploaded_file, ingester)
-                else:
-                    msg = "Must either upload a file or click the button to use existing data."
-                    st.write(msg)
-                    raise ValueError(msg)
 
 
 def init_agent() -> None:
@@ -132,13 +139,28 @@ def display_chat_history() -> None:
                 st.write_stream(create_answer(prompt))
 
 
+############ streamlit page layout functions ############
+
+
+def init_sidebar():
+    st.markdown(
+        "<p style='font-size:12px;'>"
+        "Please start a new session to use the chatbot. You can restart the session at any time.<br>"
+        "Note that by start a new session, you will lose access to any previous chat history and uploaded context."
+        "</p>",
+        unsafe_allow_html=True
+    )
+    st.button("Start Session", on_click=init_new_session)
+
+
 def init_main_page() -> None:
     if "chat_history" not in st.session_state:
         clear()
-    if "topic" in st.session_state:
+    if "topic" in st.session_state and st.session_state["topic"] != "":
         st.header("Your Chat Assistant about {}".format(st.session_state["topic"].title()))
         _, col = st.columns([3,1])
         with col:
             st.button("Reset chat history", key="reset_button", on_click=clear)
-        init_agent()
+        if "vector_store" in st.session_state:
+            init_agent()
         display_chat_history()

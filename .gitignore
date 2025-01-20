@@ -174,3 +174,4 @@ cython_debug/
 agent/test.py
 docs/
 test*
+.streamlit/secrets.toml
