@@ -37,6 +37,7 @@ class Agent:
         temperature: float,
         topic: str,
         vector_store: VectorStore,
+        k: int = 5,
         verbose: bool = True,
     ) -> None:
         self.verbose = verbose
@@ -45,7 +46,7 @@ class Agent:
             temperature=temperature,
             max_retries=2,
         )
-        self.tools = get_tools(topic, vector_store)
+        self.tools = get_tools(topic, vector_store, k=k)
         self.tool_node = ToolNode(self.tools)
         llm_with_tools = self.llm.bind_tools(self.tools)
         self.answer_chain = self.get_chain(llm_with_tools)

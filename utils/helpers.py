@@ -22,6 +22,7 @@ SNOWFLAKE_ACCOUNT = st.secrets.get("SNOWFLAKE_ACCOUNT")
 SNOWFLAKE_USER = st.secrets.get("SNOWFLAKE_USER")
 SNOWFLAKE_PASSWORD = st.secrets.get("SNOWFLAKE_PASSWORD")
 VERBOSE = st.secrets.get("VERBOSE", "False") == "True"
+K = int(st.secrets.get("K", 5))
 
 
 ############ callback functions ############
@@ -66,34 +67,6 @@ def handle_ingestion() -> None:
                 raise ValueError(msg)
 
 
-def init_new_session() -> None:
-    # close old session
-    if "session" in st.session_state:
-        st.session_state["session"].close()
-    if "agent" in st.session_state:
-        del st.session_state["agent"]
-    if "vector_store" in st.session_state:
-        del st.session_state["vector_store"]
-    # start new session
-    connection_parameters = {
-        "account": SNOWFLAKE_ACCOUNT,
-        "user": SNOWFLAKE_USER,
-        "password": SNOWFLAKE_PASSWORD,
-        "paramstyle": "pyformat"
-    }
-    session = Session.builder.configs(connection_parameters).create()
-    st.session_state["session"] = session
-    clear()
-
-    st.radio(
-        "Select the data to use as context for your chatbot.",
-        ["Use default", "Upload new"],
-        index=None,
-        key="source",
-        on_change=handle_ingestion
-    )
-
-
 ############ layout helper functions ############
 
 
@@ -118,6 +91,7 @@ def init_agent() -> None:
             temperature=CHAT_MODEL_TEMPERATURE,
             topic=st.session_state["topic"],
             vector_store=st.session_state["vector_store"],
+            k=K,
             verbose=VERBOSE
         )
         st.session_state["agent"] = agent.compile()
@@ -150,7 +124,33 @@ def init_sidebar():
         "</p>",
         unsafe_allow_html=True
     )
-    st.button("Start Session", on_click=init_new_session)
+    start_session = st.button("Start Session")
+    if start_session:
+        # close old session
+        if "session" in st.session_state:
+            st.session_state["session"].close()
+        if "agent" in st.session_state:
+            del st.session_state["agent"]
+        if "vector_store" in st.session_state:
+            del st.session_state["vector_store"]
+        # start new session
+        connection_parameters = {
+            "account": SNOWFLAKE_ACCOUNT,
+            "user": SNOWFLAKE_USER,
+            "password": SNOWFLAKE_PASSWORD,
+            "paramstyle": "pyformat"
+        }
+        session = Session.builder.configs(connection_parameters).create()
+        st.session_state["session"] = session
+        clear()
+
+        st.radio(
+            "Select the data to use as context for your chatbot.",
+            ["Use default", "Upload new"],
+            index=None,
+            key="source",
+            on_change=handle_ingestion
+        )
 
 
 def init_main_page() -> None:

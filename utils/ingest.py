@@ -85,7 +85,7 @@ class IngestData:
         vector_store = SnowflakeCortexVectorStore(
             connection=self._session.connection,
             topic=self._topic,
-            embeddings=self._embeddings,
+            embedding=self._embeddings,
             dimensions=self._dimensions
         )
         return vector_store
