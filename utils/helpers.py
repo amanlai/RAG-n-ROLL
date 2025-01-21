@@ -33,10 +33,10 @@ def clear() -> None:
 
 def handle_ingestion() -> None:
     if st.session_state["source"] == "Use default":
-        st.session_state["topic"] = "Using the Python connector in Snowflake"
+        st.session_state["topic"] = "Whoville Shopping Mall"
         ingester = IngestData(
             session=st.session_state["session"],
-            topic="usingthepythonconnectorinsnowflake",
+            topic="whovilleshoppingmall",
         )
         st.session_state["vector_store"] = ingester.get_vector_store()
     else:
@@ -120,7 +120,8 @@ def init_sidebar():
     st.markdown(
         "<p style='font-size:12px;'>"
         "Please start a new session to use the chatbot. You can restart the session at any time.<br>"
-        "Note that by start a new session, you will lose access to any previous chat history and uploaded context."
+        "Idle sessions will be closed after 60 minutes.<br>"
+        "Note that by starting a new session, you will lose access to any previous chat history and uploaded context."
         "</p>",
         unsafe_allow_html=True
     )
